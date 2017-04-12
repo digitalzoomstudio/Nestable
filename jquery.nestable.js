@@ -27,23 +27,25 @@
     })();
 
     var defaults = {
-            listNodeName    : 'ol',
-            itemNodeName    : 'li',
-            rootClass       : 'dd',
-            listClass       : 'dd-list',
-            itemClass       : 'dd-item',
-            dragClass       : 'dd-dragel',
-            handleClass     : 'dd-handle',
-            collapsedClass  : 'dd-collapsed',
-            placeClass      : 'dd-placeholder',
-            noDragClass     : 'dd-nodrag',
-            emptyClass      : 'dd-empty',
-            expandBtnHTML   : '<button data-action="expand" type="button">Expand</button>',
-            collapseBtnHTML : '<button data-action="collapse" type="button">Collapse</button>',
-            group           : 0,
-            maxDepth        : 5,
-            threshold       : 20
-        };
+        listNodeName    : 'ol',
+        itemNodeName    : 'li',
+        rootClass       : 'dd',
+        listClass       : 'dd-list',
+        itemClass       : 'dd-item',
+        dragClass       : 'dd-dragel',
+        handleClass     : 'dd-handle',
+        collapsedClass  : 'dd-collapsed',
+        placeClass      : 'dd-placeholder',
+        noDragClass     : 'dd-nodrag',
+        emptyClass      : 'dd-empty',
+        expandBtnHTML   : '<button data-action="expand" type="button">Expand</button>',
+        collapseBtnHTML : '<button data-action="collapse" type="button">Collapse</button>',
+        group           : 0,
+        maxDepth        : 5,
+        threshold       : 20
+        ,action_drag_stop: null
+        ,action_drag_start: null
+    };
 
     function Plugin(element, options)
     {
@@ -141,22 +143,22 @@
             var data,
                 depth = 0,
                 list  = this;
-                step  = function(level, depth)
+            step  = function(level, depth)
+            {
+                var array = [ ],
+                    items = level.children(list.options.itemNodeName);
+                items.each(function()
                 {
-                    var array = [ ],
-                        items = level.children(list.options.itemNodeName);
-                    items.each(function()
-                    {
-                        var li   = $(this),
-                            item = $.extend({}, li.data()),
-                            sub  = li.children(list.options.listNodeName);
-                        if (sub.length) {
-                            item.children = step(sub, depth + 1);
-                        }
-                        array.push(item);
-                    });
-                    return array;
-                };
+                    var li   = $(this),
+                        item = $.extend({}, li.data()),
+                        sub  = li.children(list.options.listNodeName);
+                    if (sub.length) {
+                        item.children = step(sub, depth + 1);
+                    }
+                    array.push(item);
+                });
+                return array;
+            };
             data = step(list.el.find(list.options.listNodeName).first(), depth);
             return data;
         },
@@ -283,6 +285,9 @@
                     this.dragDepth = depth;
                 }
             }
+            if(this.options.action_drag_start){
+                this.options.action_drag_start(e, this.dragEl);
+            }
         },
 
         dragStop: function(e)
@@ -297,10 +302,12 @@
                 this.dragRootEl.trigger('change');
             }
             this.reset();
+            if(this.options.action_drag_stop){
+                this.options.action_drag_stop();
+            }
         },
 
-        dragMove: function(e)
-        {
+        dragMove: function(e){
             var list, parent, prev, next, depth,
                 opt   = this.options,
                 mouse = this.mouse;
@@ -326,6 +333,8 @@
             mouse.dirX = mouse.distX === 0 ? 0 : mouse.distX > 0 ? 1 : -1;
             mouse.dirY = mouse.distY === 0 ? 0 : mouse.distY > 0 ? 1 : -1;
             // axis mouse is now moving on
+
+            //console.info(mouse);
             var newAx   = Math.abs(mouse.distX) > Math.abs(mouse.distY) ? 1 : 0;
 
             // do nothing on first move
@@ -354,12 +363,22 @@
             /**
              * move horizontal
              */
-            if (mouse.dirAx && mouse.distAxX >= opt.threshold) {
+            if (mouse.dirAx && mouse.distAxX >= opt.threshold ) {
                 // reset move distance on x-axis for new phase
+
+
+
                 mouse.distAxX = 0;
+
+
                 prev = this.placeEl.prev(opt.itemNodeName);
+
+
+
+
+
                 // increase horizontal level if previous sibling exists and is not collapsed
-                if (mouse.distX > 0 && prev.length && !prev.hasClass(opt.collapsedClass)) {
+                if (mouse.distX > 0 && prev.length && !prev.hasClass(opt.collapsedClass) && prev.hasClass('dd-container') ) {
                     // cannot increase level when item above is collapsed
                     list = prev.find(opt.listNodeName).last();
                     // check if depth limit has reached
@@ -405,43 +424,62 @@
             if (this.pointEl.hasClass(opt.handleClass)) {
                 this.pointEl = this.pointEl.parent(opt.itemNodeName);
             }
-            if (this.pointEl.hasClass(opt.emptyClass)) {
-                isEmpty = true;
+
+
+
+            var _pe = this.pointEl;
+
+            if(_pe.hasClass('builder-layer--head')){
+                _pe = _pe.parent();
             }
-            else if (!this.pointEl.length || !this.pointEl.hasClass(opt.itemClass)) {
+
+
+
+            // console.info('_pe - ',_pe, opt.itemClass, opt.handleClass, opt.emptyClass, opt.rootClass);
+
+            if (_pe.hasClass(opt.emptyClass)) {
+                isEmpty = true;
+            } else if (!_pe.length || !_pe.hasClass(opt.itemClass)) {
                 return;
             }
 
             // find parent list of item under cursor
-            var pointElRoot = this.pointEl.closest('.' + opt.rootClass),
+            var pointElRoot = _pe.closest('.' + opt.rootClass),
                 isNewRoot   = this.dragRootEl.data('nestable-id') !== pointElRoot.data('nestable-id');
 
             /**
              * move vertical
              */
+
+            // console.info(!mouse.dirAx, isNewRoot, isEmpty);
             if (!mouse.dirAx || isNewRoot || isEmpty) {
                 // check if groups match if dragging over new root
-                if (isNewRoot && opt.group !== pointElRoot.data('nestable-group')) {
+
+                // console.info(" pointElRoot.data('nestable-group') - ",pointElRoot.data('nestable-group'));
+
+                // && typeof pointElRoot.data('nestable-group')!='undefined'
+
+                if (isNewRoot && typeof pointElRoot.data('nestable-group')!='undefined' && opt.group !== pointElRoot.data('nestable-group')) {
                     return;
                 }
                 // check depth limit
-                depth = this.dragDepth - 1 + this.pointEl.parents(opt.listNodeName).length;
+                depth = this.dragDepth - 1 + _pe.parents(opt.listNodeName).length;
                 if (depth > opt.maxDepth) {
                     return;
                 }
-                var before = e.pageY < (this.pointEl.offset().top + this.pointEl.height() / 2);
-                    parent = this.placeEl.parent();
+                var before = e.pageY < (_pe.offset().top + _pe.height() / 2);
+                parent = this.placeEl.parent();
                 // if empty create new list to replace empty placeholder
                 if (isEmpty) {
                     list = $(document.createElement(opt.listNodeName)).addClass(opt.listClass);
                     list.append(this.placeEl);
-                    this.pointEl.replaceWith(list);
+                    _pe.replaceWith(list);
                 }
                 else if (before) {
-                    this.pointEl.before(this.placeEl);
+                    _pe.before(this.placeEl);
                 }
                 else {
-                    this.pointEl.after(this.placeEl);
+                    _pe.after(this.placeEl);
                 }
                 if (!parent.children().length) {
                     this.unsetParent(parent.parent());
